@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import unsloth
 import json
 import logging
 import time
@@ -134,7 +135,7 @@ class QLoRATrainer:
                 eval_loss=metrics.get("eval_loss", 0.0),
                 train_time_seconds=elapsed,
                 vram_peak_gb=vram_peak,
-                num_samples=len(dataset.get("train", dataset)),
+                num_samples=len(dataset),
                 metrics=metrics,
             )
 
@@ -213,7 +214,7 @@ class QLoRATrainer:
             load_in_4bit=self.train_config.get("load_in_4bit", True),
         )
 
-        logger.info("Model loaded. Tokenizer vocab size: %d", len(tokenizer))
+        logger.info("Model loaded. Tokenizer/Processor type: %s", type(tokenizer).__name__)
         return model, tokenizer
 
     def _apply_lora(self, model):
@@ -279,8 +280,7 @@ class QLoRATrainer:
 
     def _create_trainer(self, model, tokenizer, dataset, output_dir: str, resume_from: str | None):
         """Create the SFTTrainer with all callbacks."""
-        from trl import SFTTrainer
-        from transformers import TrainingArguments
+        from trl import SFTConfig, SFTTrainer
 
         from training.callbacks import EvalLossCallback, MLflowLoggingCallback, VRAMMonitorCallback
 
@@ -288,14 +288,14 @@ class QLoRATrainer:
         eval_ratio = self.train_config.get("eval_split_ratio", 0.1)
         split = dataset.train_test_split(test_size=eval_ratio, seed=self.train_config.get("seed", 42))
 
-        training_args = TrainingArguments(
+        training_args = SFTConfig(
             output_dir=output_dir,
             per_device_train_batch_size=self.profile.per_device_train_batch_size,
             gradient_accumulation_steps=self.profile.gradient_accumulation_steps,
             num_train_epochs=self.profile.num_train_epochs,
             learning_rate=self.profile.learning_rate,
             lr_scheduler_type=self.train_config.get("lr_scheduler_type", "cosine"),
-            warmup_ratio=self.train_config.get("warmup_ratio", 0.05),
+            warmup_steps=self.train_config.get("warmup_steps", 10),
             weight_decay=self.train_config.get("weight_decay", 0.01),
             max_grad_norm=self.profile.max_grad_norm,
             optim=self.train_config.get("optim", "adamw_8bit"),
@@ -303,12 +303,15 @@ class QLoRATrainer:
             bf16=self.train_config.get("bf16", True),
             logging_steps=self.train_config.get("logging_steps", 5),
             save_strategy=self.train_config.get("save_strategy", "epoch"),
-            eval_strategy=self.train_config.get("eval_strategy", "epoch"),
+            eval_strategy=self.train_config.get("eval_strategy", "no"),
             seed=self.train_config.get("seed", 42),
             report_to="none",  # We handle MLflow via custom callback
-            load_best_model_at_end=True,
+            load_best_model_at_end=self.train_config.get("load_best_model_at_end", False),
             metric_for_best_model="eval_loss",
             greater_is_better=False,
+            dataset_text_field="text",
+            max_seq_length=self.profile.max_seq_length,
+            packing=False,
         )
 
         trainer = SFTTrainer(
@@ -317,9 +320,6 @@ class QLoRATrainer:
             train_dataset=split["train"],
             eval_dataset=split["test"],
             args=training_args,
-            max_seq_length=self.profile.max_seq_length,
-            dataset_text_field="text",
-            packing=False,
             callbacks=[
                 VRAMMonitorCallback(),
                 EvalLossCallback(),

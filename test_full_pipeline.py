@@ -11,6 +11,7 @@ Usage:
     python test_full_pipeline.py --all          # Include GPU stage 5
 """
 from __future__ import annotations
+import unsloth
 import argparse, asyncio, json, logging, sys, time
 from pathlib import Path
 from rich.console import Console

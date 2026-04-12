@@ -3,3 +3,11 @@ venv_wsl/
 unsloth_compiled_cache/ 
 mlruns/ 
 __pycache__/
+.pytest_cache/
+*.log
+.DS_Store
+
+# MerchFine Generated Artifacts
+outputs/
+data/processed/
+data/vector_store/

@@ -11,11 +11,12 @@ defaults:
   use_gradient_checkpointing: "unsloth"
   optim: adamw_8bit
   lr_scheduler_type: cosine
-  warmup_ratio: 0.05
+  warmup_steps: 10
   weight_decay: 0.01
   logging_steps: 5
   save_strategy: epoch
-  eval_strategy: epoch
+  eval_strategy: "no"  # Disable on Windows to prevent C++ VRAM eval crashes during QLoRA
+  load_best_model_at_end: false
   seed: 42
   fp16: false
   bf16: true
@@ -29,7 +30,7 @@ profiles:
   gemma-3-4b:
     lora_r: 16
     lora_alpha: 16
-    lora_dropout: 0.05
+    lora_dropout: 0.0
     target_modules:
       - q_proj
       - k_proj
@@ -48,7 +49,7 @@ profiles:
   qwen2.5-3b:
     lora_r: 16
     lora_alpha: 16
-    lora_dropout: 0.05
+    lora_dropout: 0.0
     target_modules:
       - q_proj
       - k_proj
@@ -67,7 +68,7 @@ profiles:
   phi-4-mini:
     lora_r: 16
     lora_alpha: 16
-    lora_dropout: 0.05
+    lora_dropout: 0.0
     target_modules:
       - q_proj
       - k_proj
