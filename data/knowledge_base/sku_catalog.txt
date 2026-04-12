@@ -1,0 +1,81 @@
+# MerchMix SKU Catalog
+# Master product catalog for demand forecasting and inventory planning.
+# Updated weekly from POS system exports.
+
+## Category: Apparel — Tops
+
+SKU: APP-TS-001 | Name: Classic Crew Neck Tee | Category: Apparel > Tops > T-Shirts
+  Colors: Black, White, Navy, Heather Gray | Sizes: XS, S, M, L, XL, XXL
+  Base Price: $24.99 | Cost: $8.50 | Margin: 66%
+  Lead Time: 14 days | MOQ: 144 units | Pack Size: 12
+  Seasonality: Year-round, peaks Jun–Aug
+  Avg Monthly Sales: 480 units | Sell-Through Rate: 72%
+
+SKU: APP-TS-002 | Name: Premium V-Neck Blend | Category: Apparel > Tops > T-Shirts
+  Colors: Black, White, Charcoal, Sage | Sizes: S, M, L, XL
+  Base Price: $34.99 | Cost: $12.75 | Margin: 64%
+  Lead Time: 21 days | MOQ: 96 units | Pack Size: 12
+  Seasonality: Year-round, slight peak Spring
+  Avg Monthly Sales: 310 units | Sell-Through Rate: 68%
+
+SKU: APP-TP-003 | Name: Oversized Graphic Hoodie | Category: Apparel > Tops > Hoodies
+  Colors: Black, Cream, Forest Green | Sizes: S, M, L, XL
+  Base Price: $59.99 | Cost: $22.00 | Margin: 63%
+  Lead Time: 28 days | MOQ: 72 units | Pack Size: 6
+  Seasonality: Sep–Mar (cold weather), peak Nov–Dec
+  Avg Monthly Sales: 195 units | Sell-Through Rate: 58%
+
+## Category: Apparel — Bottoms
+
+SKU: APP-BT-004 | Name: Slim Fit Chino | Category: Apparel > Bottoms > Pants
+  Colors: Khaki, Navy, Olive, Black | Sizes: 28–38 waist
+  Base Price: $49.99 | Cost: $18.00 | Margin: 64%
+  Lead Time: 21 days | MOQ: 60 units | Pack Size: 6
+  Seasonality: Year-round, peaks Back-to-School (Aug) and Holiday (Nov)
+  Avg Monthly Sales: 265 units | Sell-Through Rate: 65%
+
+SKU: APP-BT-005 | Name: Relaxed Jogger | Category: Apparel > Bottoms > Joggers
+  Colors: Black, Gray, Navy | Sizes: S, M, L, XL, XXL
+  Base Price: $44.99 | Cost: $15.50 | Margin: 66%
+  Lead Time: 14 days | MOQ: 96 units | Pack Size: 12
+  Seasonality: Year-round, slight peak Jan–Feb (New Year fitness)
+  Avg Monthly Sales: 340 units | Sell-Through Rate: 70%
+
+## Category: Accessories
+
+SKU: ACC-BG-006 | Name: Canvas Tote Bag | Category: Accessories > Bags
+  Colors: Natural, Black, Navy | Sizes: One Size
+  Base Price: $29.99 | Cost: $7.25 | Margin: 76%
+  Lead Time: 10 days | MOQ: 200 units | Pack Size: 25
+  Seasonality: Year-round, peaks Spring and Back-to-School
+  Avg Monthly Sales: 520 units | Sell-Through Rate: 82%
+
+SKU: ACC-HT-007 | Name: Structured Baseball Cap | Category: Accessories > Hats
+  Colors: Black, Navy, White, Camo | Sizes: One Size (adjustable)
+  Base Price: $22.99 | Cost: $6.00 | Margin: 74%
+  Lead Time: 10 days | MOQ: 144 units | Pack Size: 12
+  Seasonality: Mar–Sep (outdoor season), peak Jun–Jul
+  Avg Monthly Sales: 410 units | Sell-Through Rate: 78%
+
+SKU: ACC-SC-008 | Name: Lightweight Knit Scarf | Category: Accessories > Scarves
+  Colors: Charcoal, Burgundy, Oatmeal | Sizes: One Size
+  Base Price: $34.99 | Cost: $9.50 | Margin: 73%
+  Lead Time: 21 days | MOQ: 48 units | Pack Size: 6
+  Seasonality: Oct–Feb, peak Nov–Dec (gifting)
+  Avg Monthly Sales: 180 units | Sell-Through Rate: 55%
+
+## Category: Footwear
+
+SKU: FTW-SN-009 | Name: Classic Low-Top Sneaker | Category: Footwear > Sneakers
+  Colors: White, Black, Navy | Sizes: 6–13
+  Base Price: $69.99 | Cost: $28.00 | Margin: 60%
+  Lead Time: 35 days | MOQ: 48 units | Pack Size: 6
+  Seasonality: Year-round, peaks Spring and Back-to-School
+  Avg Monthly Sales: 230 units | Sell-Through Rate: 62%
+
+SKU: FTW-BT-010 | Name: Waterproof Chelsea Boot | Category: Footwear > Boots
+  Colors: Brown, Black | Sizes: 7–13
+  Base Price: $89.99 | Cost: $35.00 | Margin: 61%
+  Lead Time: 42 days | MOQ: 36 units | Pack Size: 6
+  Seasonality: Sep–Mar, peak Oct–Nov
+  Avg Monthly Sales: 145 units | Sell-Through Rate: 52%

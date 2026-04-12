@@ -1,0 +1,45 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Guardrails Configuration
+# Three independent safety layers, each configurable independently.
+# ──────────────────────────────────────────────────────────────────────────
+
+mode: audit        # "strict" = block flagged responses, "audit" = pass with warning
+
+input_sanitizer:
+  enabled: true
+  max_query_length: 2000
+  max_query_tokens: 500
+  injection_patterns:
+    - "ignore previous instructions"
+    - "ignore all prior"
+    - "system prompt"
+    - "you are now"
+    - "disregard"
+    - "bypass"
+    - "jailbreak"
+  pii_detection:
+    enabled: true
+    patterns:
+      email: '[\w\.-]+@[\w\.-]+\.\w+'
+      phone: '\+?\d[\d\s\-]{8,}\d'
+      ssn: '\d{3}-\d{2}-\d{4}'
+    action: redact     # "redact" or "block"
+
+format_validator:
+  enabled: true
+  max_retries: 1
+  retry_with_format_instruction: true
+  strict_json_mode: false
+
+provenance_guard:
+  enabled: true
+  cosine_threshold: 0.70
+  flag_action: log     # "log" in audit mode, "block" in strict mode
+  embedding_model: null  # Uses same model as RAG embeddings
+
+consistency_checker:
+  enabled: false          # Expensive — enable for critical queries only
+  num_samples: 2
+  agreement_threshold: 0.80
+  temperature_for_samples: 0.7
+  judge_model: null       # Uses champion model as judge; override if needed

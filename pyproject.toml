@@ -1,0 +1,116 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "merchfine"
+version = "0.1.0"
+description = "MerchMix LLMOps — Production-grade AI system for retail demand forecasting"
+requires-python = ">=3.12,<3.14"
+license = {text = "MIT"}
+authors = [
+    {name = "MerchMix Team"},
+]
+
+dependencies = [
+    # --- Core ---
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "httpx>=0.28",
+    "aiofiles>=24.0",
+
+    # --- API ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+
+    # --- ML / Training ---
+    "torch>=2.6",
+    "transformers>=4.49",
+    "peft>=0.14",
+    "trl>=0.16",
+    "bitsandbytes>=0.45",
+    "datasets>=3.3",
+    "accelerate>=1.4",
+    "unsloth",
+
+    # --- Inference ---
+    "litellm>=1.60",
+    "ollama>=0.4",
+
+    # --- RAG ---
+    "llama-index>=0.12",
+    "llama-index-vector-stores-chroma>=0.4",
+    "llama-index-embeddings-huggingface>=0.5",
+    "chromadb>=0.6",
+    "rank-bm25>=0.2",
+
+    # --- Agents ---
+    "langgraph>=0.3",
+    "langchain-core>=0.3",
+
+    # --- Registry & Tracking ---
+    "mlflow>=3.1",
+    "optuna>=4.2",
+
+    # --- Evaluation ---
+    "deepeval>=2.5",
+    "ragas>=0.2",
+
+    # --- Observability ---
+    "structlog>=24.0",
+    "loguru>=0.7",
+    "prometheus-client>=0.22",
+
+    # --- Guardrails ---
+    "guardrails-ai>=0.6",
+
+    # --- Cache (optional — falls back to in-memory if unavailable) ---
+    "redis>=5.0",
+
+    # --- Utilities ---
+    "jinja2>=3.1",
+    "rich>=13.0",
+    "typer>=0.15",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "black>=24.0",
+    "mypy>=1.14",
+    "fakeredis>=2.26",
+]
+
+[project.scripts]
+merchfine = "core.system_init:cli_entrypoint"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

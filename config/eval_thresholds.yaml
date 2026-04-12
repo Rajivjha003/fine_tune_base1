@@ -1,0 +1,85 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Evaluation Quality Gate Thresholds
+# Hard gates block model promotion. Soft gates generate warnings.
+# ──────────────────────────────────────────────────────────────────────────
+
+gates:
+  # ── Hard Gates (must pass for promotion) ──────────────────────────────
+  faithfulness:
+    metric: ragas_faithfulness
+    min_threshold: 0.85
+    gate_type: hard
+    description: "RAGAS faithfulness — output grounded in retrieved context"
+
+  answer_relevancy:
+    metric: ragas_answer_relevancy
+    min_threshold: 0.80
+    gate_type: hard
+    description: "RAGAS answer relevancy — output addresses the query"
+
+  contextual_precision:
+    metric: ragas_context_precision
+    min_threshold: 0.75
+    gate_type: hard
+    description: "RAGAS context precision — retrieved context is relevant"
+
+  hallucination_rate:
+    metric: deepeval_hallucination
+    max_threshold: 0.10
+    gate_type: hard
+    description: "DeepEval hallucination — rate of fabricated content"
+
+  refusal_accuracy:
+    metric: deepeval_refusal_accuracy
+    min_threshold: 0.90
+    gate_type: hard
+    description: "Model correctly refuses when data is insufficient"
+
+  forecast_accuracy:
+    metric: custom_forecast_numeric
+    min_threshold: 0.80
+    gate_type: hard
+    description: "Numeric values in forecast match ground truth within tolerance"
+
+  # ── Soft Gates (warning only) ─────────────────────────────────────────
+  latency_p95:
+    metric: prometheus_p95_latency
+    max_threshold: 3.0
+    gate_type: soft
+    description: "p95 inference latency in seconds"
+
+  # ── Info Only ─────────────────────────────────────────────────────────
+  cache_hit_rate:
+    metric: litellm_cache_hit_rate
+    min_threshold: 0.30
+    gate_type: info
+    description: "Semantic cache hit rate"
+
+evaluation:
+  test_cases_dir: ./evaluation/test_cases
+  min_test_cases: 10
+  timeout_per_case_seconds: 30
+  parallel_workers: 2
+
+judge:
+  enabled: true
+  rubric:
+    factual_grounding:
+      weight: 0.4
+      description: "Are all numbers traceable to input context?"
+    completeness:
+      weight: 0.3
+      description: "Does the response address all aspects of the query?"
+    actionability:
+      weight: 0.3
+      description: "Can a merchandiser act on this output immediately?"
+  score_range: [1, 5]
+  min_passing_score: 3.5
+
+triggers:
+  - "on": "fine_tune_complete"
+  - "on": "model_swap"
+  - "on": "rag_index_rebuild"
+  - "on": "prompt_template_change"
+  - "on": "scheduled"
+    cron: "0 3 * * 0"      # Weekly Sunday 3 AM

@@ -1,0 +1,81 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Model Registry Configuration
+# All supported models, their identifiers, resource requirements, and tiers.
+# The system reads this at startup — no model is ever hardcoded in Python.
+# ──────────────────────────────────────────────────────────────────────────
+
+defaults:
+  inference_backend: ollama
+  prompt_format: auto              # auto-detects from model family
+  quantization: q4_k_m
+  context_window: 2048
+
+models:
+  gemma-3-4b:
+    hf_id: "unsloth/gemma-3-4b-it"
+    family: gemma3
+    tier: primary
+    vram_required_gb: 3.5
+    ram_required_gb: 4.0
+    supports_tool_calling: false
+    prompt_format: gemma3_chat
+    context_window: 2048
+    gguf_quant_methods:
+      - q4_k_m
+      - q5_k_m
+      - q8_0
+    ollama_name: "merchfine-gemma3"
+    description: "Gemma 3 4B-IT — best quality/VRAM ratio at 8GB"
+
+  qwen2.5-3b:
+    hf_id: "unsloth/Qwen2.5-3B-Instruct"
+    family: qwen2
+    tier: fallback
+    vram_required_gb: 2.5
+    ram_required_gb: 3.0
+    supports_tool_calling: true
+    prompt_format: qwen2_chat
+    context_window: 2048
+    gguf_quant_methods:
+      - q4_k_m
+      - q5_k_m
+    ollama_name: "merchfine-qwen25"
+    description: "Qwen2.5 3B — lightweight fallback with tool calling"
+
+  phi-4-mini:
+    hf_id: "unsloth/Phi-4-mini-instruct"
+    family: phi4
+    tier: upgrade
+    vram_required_gb: 4.0
+    ram_required_gb: 5.0
+    supports_tool_calling: true
+    prompt_format: phi4_chat
+    context_window: 4096
+    gguf_quant_methods:
+      - q4_k_m
+    ollama_name: "merchfine-phi4"
+    description: "Phi-4 Mini — upgrade tier with longer context"
+
+# Hardware tiers — used by upgrade_planner.py
+hardware_tiers:
+  tier_0:
+    label: "RTX 4070 Laptop 8GB"
+    vram_gb: 8
+    eligible_models: ["gemma-3-4b", "qwen2.5-3b"]
+    inference_backend: ollama
+
+  tier_1:
+    label: "RTX 4090 24GB"
+    vram_gb: 24
+    eligible_models: ["gemma-3-4b", "qwen2.5-3b", "phi-4-mini"]
+    inference_backend: ollama
+
+  tier_2:
+    label: "2x RTX 4090 / A100"
+    vram_gb: 48
+    eligible_models: ["*"]
+    inference_backend: vllm
+
+aliases:
+  champion: null     # Set at runtime via ModelManager
+  challenger: null

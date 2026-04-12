@@ -1,0 +1,46 @@
+# ──────────────────────────────────────────────────────────────────────────
+# RAG Pipeline Configuration
+# Hierarchical auto-merging retrieval parameters.
+# ──────────────────────────────────────────────────────────────────────────
+
+embedding:
+  model_name: "BAAI/bge-small-en-v1.5"
+  device: cpu                     # Always CPU — keeps VRAM free for LLM
+  embed_batch_size: 64
+  cache_dir: ./outputs/embeddings_cache
+
+vector_store:
+  provider: chroma
+  persist_dir: ./data/vector_store
+  collection_name: merchfine_kb
+  distance_metric: cosine
+
+chunking:
+  # Hierarchical node sizes (tokens)
+  parent_chunk_size: 2048
+  child_chunk_size: 512
+  leaf_chunk_size: 128
+  chunk_overlap: 20               # Overlap between sibling chunks
+
+retrieval:
+  top_k: 12                       # Initial retrieval count
+  final_top_k: 5                  # After reranking
+  auto_merge_threshold: 0.6       # Merge parent if ≥60% children retrieved
+  hybrid_alpha: 0.5               # Balance: 0=sparse only, 1=dense only
+  enable_bm25: true
+  enable_reranker: false          # CPU cost ~200ms — toggle on if quality needed
+
+reranker:
+  model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  device: cpu
+  batch_size: 16
+
+knowledge_base:
+  source_dir: ./data/knowledge_base
+  supported_extensions:
+    - .txt
+    - .md
+    - .csv
+    - .pdf
+  auto_rebuild_on_change: true
+  rebuild_eval_required: true     # Trigger RAGAS eval after every rebuild

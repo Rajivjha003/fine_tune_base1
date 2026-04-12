@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "created_at": "2026-04-12T14:07:33.446629Z",
+  "total_samples": 44,
+  "category_distribution": {
+    "demand_forecast": 7,
+    "mio_plan": 4,
+    "reorder_inventory": 6,
+    "sell_through": 6,
+    "refusal": 12,
+    "general": 9
+  },
+  "unique_checksums": 44,
+  "duplicate_count": 0,
+  "file_path": "data\\processed\\train_v1.0_20260412_140733.jsonl",
+  "sha256": "18ffdd957688260712a95b4491c37ef405e0c0df2a61f003422bb64d53531069",
+  "refusal_ratio": 0.2727272727272727
+}

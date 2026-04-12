@@ -1,0 +1,80 @@
+# ============================================================
+# MerchMix LLMOps — Full Requirements (Python 3.12)
+# ============================================================
+# INSTALL ORDER MATTERS! Follow the 3-step process below.
+#
+# STEP 1: Install PyTorch with CUDA first (run this separately):
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+#
+# STEP 2: Install Unsloth (run this separately):
+#   pip install unsloth
+#
+# STEP 3: Install everything else:
+#   pip install -r requirements.txt
+# ============================================================
+
+# --- Core Framework ---
+pydantic>=2.10
+pydantic-settings>=2.7
+pyyaml>=6.0
+python-dotenv>=1.0
+httpx>=0.28
+aiofiles>=24.0
+
+# --- API ---
+fastapi>=0.115
+uvicorn[standard]>=0.34
+
+# --- ML / Training (torch installed separately with CUDA) ---
+transformers>=4.49
+peft>=0.14
+trl>=0.16
+bitsandbytes>=0.45
+datasets>=3.3
+accelerate>=1.4
+
+# --- Inference ---
+litellm>=1.60
+ollama>=0.4
+
+# --- RAG ---
+llama-index-core>=0.12
+llama-index-vector-stores-chroma>=0.4
+llama-index-embeddings-huggingface>=0.5
+chromadb>=0.6
+rank-bm25>=0.2
+
+# --- Agents ---
+langgraph>=0.3
+langchain-core>=0.3
+
+# --- Registry & Tracking ---
+mlflow>=3.1
+optuna>=4.2
+
+# --- Evaluation ---
+deepeval>=2.5
+ragas>=0.2
+
+# --- Observability ---
+structlog>=24.0
+loguru>=0.7
+prometheus-client>=0.22
+
+# --- Guardrails ---
+guardrails-ai>=0.6
+
+# --- Cache ---
+redis>=5.0
+
+# --- Utilities ---
+jinja2>=3.1
+rich>=13.0
+typer>=0.15
+psutil>=5.9
+sentence-transformers>=3.0
+
+# --- Dev (optional) ---
+# pytest>=8.0
+# pytest-asyncio>=0.25
+# ruff>=0.9

@@ -1,0 +1,97 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Fine-Tuning Hyperparameters
+# Per-model training configuration. The trainer reads from here exclusively.
+# Override any value via environment: TRAINING__GEMMA_3_4B__LORA_R=32
+# ──────────────────────────────────────────────────────────────────────────
+
+defaults:
+  load_in_4bit: true
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_compute_dtype: bfloat16
+  use_gradient_checkpointing: "unsloth"
+  optim: adamw_8bit
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  logging_steps: 5
+  save_strategy: epoch
+  eval_strategy: epoch
+  seed: 42
+  fp16: false
+  bf16: true
+  report_to: none           # MLflow logging via custom callback
+  dataset_format: alpaca     # instruction / input / output
+  eval_split_ratio: 0.1
+  refusal_ratio_min: 0.20
+  vram_alert_threshold_gb: 7.5
+
+profiles:
+  gemma-3-4b:
+    lora_r: 16
+    lora_alpha: 16
+    lora_dropout: 0.05
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+      - gate_proj
+      - up_proj
+      - down_proj
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    max_seq_length: 512
+    learning_rate: 0.0002
+    num_train_epochs: 3
+    max_grad_norm: 0.3
+
+  qwen2.5-3b:
+    lora_r: 16
+    lora_alpha: 16
+    lora_dropout: 0.05
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+      - gate_proj
+      - up_proj
+      - down_proj
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 4
+    max_seq_length: 512
+    learning_rate: 0.0002
+    num_train_epochs: 3
+    max_grad_norm: 0.3
+
+  phi-4-mini:
+    lora_r: 16
+    lora_alpha: 16
+    lora_dropout: 0.05
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+      - gate_proj
+      - up_proj
+      - down_proj
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    max_seq_length: 1024
+    learning_rate: 0.0001
+    num_train_epochs: 3
+    max_grad_norm: 0.3
+
+# Optuna sweep search spaces
+sweep:
+  n_trials: 10
+  timeout_seconds: 7200
+  search_space:
+    lora_r: [8, 16, 32]
+    lora_alpha: [8, 16, 32]
+    learning_rate: [0.0001, 0.0002, 0.0005]
+    per_device_train_batch_size: [1, 2]
+    gradient_accumulation_steps: [4, 8, 16]
+  objective_metric: eval_loss
+  direction: minimize

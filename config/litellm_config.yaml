@@ -1,0 +1,51 @@
+# ──────────────────────────────────────────────────────────────────────────
+# LiteLLM Proxy Configuration
+# Unified gateway with fallback routing, caching, and circuit breaker.
+# ──────────────────────────────────────────────────────────────────────────
+
+model_list:
+  - model_name: "merchfine-primary"
+    litellm_params:
+      model: "ollama/merchfine-gemma3"
+      api_base: "http://127.0.0.1:11434"
+      timeout: 60
+      stream: false
+    model_info:
+      tier: primary
+
+  - model_name: "merchfine-fallback"
+    litellm_params:
+      model: "ollama/merchfine-qwen25"
+      api_base: "http://127.0.0.1:11434"
+      timeout: 60
+      stream: false
+    model_info:
+      tier: fallback
+
+router_settings:
+  routing_strategy: "simple-shuffle"
+  num_retries: 2
+  timeout: 90
+  retry_after: 5
+  fallbacks:
+    - merchfine-primary: ["merchfine-fallback"]
+  allowed_fails: 3
+  cooldown_time: 30
+
+general_settings:
+  master_key: "sk-merchfine-local"
+  drop_params: true
+
+litellm_settings:
+  cache: true
+  cache_params:
+    type: "redis"
+    host: "127.0.0.1"
+    port: 6379
+    ttl: 3600
+    # Fallback to in-memory if Redis unavailable
+    supported_call_types:
+      - completion
+      - acompletion
+  set_verbose: false
+  telemetry: false
