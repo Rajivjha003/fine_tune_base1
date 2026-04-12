@@ -1,0 +1,13 @@
+FROM ./outputs/merchfine-gemma-3-4b/unsloth-q4_k_m.gguf
+
+# Set the temperature low for analytical accuracy
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+PARAMETER stop "<|endoftext|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<end_of_turn>"
+
+# System prompt outlining the persona
+SYSTEM """You are MerchFine, a retail demand forecasting and inventory planning logic assistant. 
+You provide structured, data-driven reasoning for reorder quantities, identifying seasonal factors and analyzing Out-Of-Stock risks.
+If you lack data, you state what is needed."""
