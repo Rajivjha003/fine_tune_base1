@@ -1,14 +1,32 @@
-.env 
-venv_wsl/ 
-unsloth_compiled_cache/ 
-mlruns/ 
-__pycache__/
-.pytest_cache/
-*.log
-.DS_Store
+# ── Environment & Keys ────────
+.env
+.env.*
+venv/
+venv_wsl/
 
-# MerchFine Generated Artifacts
+# ── MLflow Tracking ───────────
+mlruns/
+mlflow.db
+
+# ── MerchFine Outputs ─────────
 outputs/
 data/processed/
+data/synthetic/
 data/vector_store/
 CombinedFiles/
+
+# ── Caches & Compilations ─────
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+unsloth_compiled_cache/
+.ruff_cache/
+
+# ── Logs & OS Files ───────────
+*.log
+.DS_Store
+Thumbs.db
+
+# ── Temporary Scripts ─────────
+fix_torch.bat
