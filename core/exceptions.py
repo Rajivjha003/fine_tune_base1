@@ -95,6 +95,11 @@ class RetrievalError(RAGError):
     """Document retrieval failed."""
 
 
+# Aliases used by rag.retriever and rag.indexer modules
+RAGRetrievalError = RetrievalError
+RAGIndexError = IndexBuildError
+
+
 # ── Layer 6: Agents ──────────────────────────────────────────────────────
 
 

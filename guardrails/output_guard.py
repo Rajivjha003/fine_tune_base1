@@ -164,8 +164,10 @@ class ClaimLevelNLIGuard(GuardrailLayer):
     but contains fabricated specific claims.
     """
 
-    # NLI label mapping for cross-encoder models
-    NLI_LABELS = {"entailment": 0, "neutral": 1, "contradiction": 2}
+    # NLI label order for cross-encoder/nli-deberta-v3-small: [contradiction, entailment, neutral]
+    NLI_ENTAILMENT_IDX = 1
+    NLI_CONTRADICTION_IDX = 0
+    NLI_NEUTRAL_IDX = 2
 
     def __init__(self, entailment_threshold: float = 0.5, nli_model_name: str | None = None):
         self.settings = get_settings()
@@ -250,9 +252,9 @@ class ClaimLevelNLIGuard(GuardrailLayer):
             scores = nli_model.predict(pairs)
 
             for claim, score_row in zip(claims, scores):
-                # score_row is [entailment, neutral, contradiction] probabilities
+                # score_row is [contradiction, entailment, neutral] for deberta-v3-small
                 if hasattr(score_row, '__len__') and len(score_row) >= 3:
-                    entailment_score = float(score_row[0])
+                    entailment_score = float(score_row[self.NLI_ENTAILMENT_IDX])
                 else:
                     # Single score model — treat as entailment probability
                     entailment_score = float(score_row)
@@ -308,8 +310,13 @@ class NumericalConsistencyGuard(GuardrailLayer):
         # Percentages / common fractions
         "0", "1", "2", "3", "4", "5", "10", "100",
         # Common date/time fragments
-        "12", "24", "30", "31", "60", "90", "365",
+        "12", "24", "30", "31", "52", "60", "90", "365",
+        # Common retail/calendar numbers
+        "14", "21", "28", "48", "72", "144", "200", "500",
     }
+
+    # Tolerance for computed/derived values (±5%)
+    TOLERANCE_RATIO = 0.05
 
     def __init__(self, min_grounding_ratio: float = 0.5):
         self.settings = get_settings()
@@ -345,9 +352,34 @@ class NumericalConsistencyGuard(GuardrailLayer):
             input_text_combined = (input_text or "") + " " + context_text
             context_numbers = set(re.findall(r'\b(\d{2,}(?:\.\d+)?)\b', input_text_combined))
 
-            # Check grounding
-            grounded = response_numbers & context_numbers
-            ungrounded = response_numbers - context_numbers
+            # Check grounding with tolerance matching for computed values
+            grounded = set()
+            ungrounded = set()
+            for rn in response_numbers:
+                if rn in context_numbers:
+                    grounded.add(rn)
+                    continue
+                try:
+                    rn_val = float(rn)
+                except ValueError:
+                    ungrounded.add(rn)
+                    continue
+                # Check ±5% tolerance against any context number
+                matched = False
+                for cn in context_numbers:
+                    try:
+                        cn_val = float(cn)
+                        if cn_val == 0:
+                            continue
+                        if abs(rn_val - cn_val) / max(abs(cn_val), 1.0) <= self.TOLERANCE_RATIO:
+                            matched = True
+                            break
+                    except ValueError:
+                        continue
+                if matched:
+                    grounded.add(rn)
+                else:
+                    ungrounded.add(rn)
 
             if not response_numbers:
                 ratio = 1.0

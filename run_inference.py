@@ -1,11 +1,15 @@
-import unsloth
-from unsloth import FastLanguageModel
+import argparse
+import os
 import sys
 import logging
+from threading import Lock
+from pathlib import Path
+
+import unsloth
+from unsloth import FastLanguageModel
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
-from threading import Lock
 
 # Suppress warnings
 logging.basicConfig(level=logging.ERROR)
@@ -19,20 +23,53 @@ global_model = None
 global_tokenizer = None
 model_lock = Lock()
 
+
+def _resolve_model_path() -> str:
+    """Resolve model path from CLI args, env, config, or default convention."""
+    # 1. CLI argument (set in __main__ block)
+    model_path = os.environ.get("MERCHFINE_MODEL_PATH")
+    if model_path and Path(model_path).exists():
+        return model_path
+
+    # 2. Try config-based path
+    try:
+        from core.config import get_settings
+        settings = get_settings()
+        primary_key, _ = settings.models.get_primary_model()
+        safe_key = primary_key.replace(".", "_").replace("-", "_")
+        config_path = settings.outputs_dir / f"lora_{safe_key}"
+        if config_path.exists():
+            return str(config_path)
+    except Exception:
+        pass
+
+    # 3. Fallback — scan outputs/ for any lora_* directory
+    outputs_dir = Path(__file__).parent / "outputs"
+    if outputs_dir.exists():
+        lora_dirs = sorted(outputs_dir.glob("lora_*"))
+        if lora_dirs:
+            return str(lora_dirs[-1])
+
+    # 4. Last resort default
+    return "outputs/lora_gemma_3_4b"
+
+
 class ChatRequest(BaseModel):
     message: str
     use_rag: bool = False
 
+
 @app.on_event("startup")
 async def startup_event():
     global global_model, global_tokenizer
+    model_path = _resolve_model_path()
     print("=======================================")
     print("    MerchFine Native Inference Backend ")
     print("=======================================")
-    print("\nLoading unsloth/gemma-3-4b-it + local LoRA weights into VRAM...")
+    print(f"\nLoading model from: {model_path}")
     try:
         global_model, global_tokenizer = FastLanguageModel.from_pretrained(
-            model_name="outputs/lora_gemma_3_4b",
+            model_name=model_path,
             max_seq_length=2048,
             dtype=None,
             load_in_4bit=True,
@@ -86,9 +123,20 @@ async def api_chat(request: ChatRequest):
     }
 
 if __name__ == "__main__":
-    if "--api" in sys.argv:
+    parser = argparse.ArgumentParser(description="MerchFine Native Inference Server")
+    parser.add_argument("--api", action="store_true", help="Launch FastAPI server mode")
+    parser.add_argument("--model-path", type=str, default=None, help="Path to LoRA model directory")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Server host")
+    parser.add_argument("--port", type=int, default=8000, help="Server port")
+    args = parser.parse_args()
+
+    # Set model path via env if provided via CLI
+    if args.model_path:
+        os.environ["MERCHFINE_MODEL_PATH"] = args.model_path
+
+    if args.api:
         print("Starting FastAPI Native Backend...")
-        uvicorn.run("run_inference:app", host="127.0.0.1", port=8000, log_config=None)
+        uvicorn.run("run_inference:app", host=args.host, port=args.port, log_config=None)
     else:
         # Standard interactive loop
         print("Run 'python run_inference.py --api' to launch the cURL server.")

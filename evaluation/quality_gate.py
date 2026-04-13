@@ -12,6 +12,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -131,8 +132,113 @@ class QualityGateEngine:
             logger.warning("Quality gates failed: %s", report["hard_gate_failures"])
         else:
             logger.info("Quality gates passed successfully.")
-            
+
+        # Auto-save report to disk
+        self._save_report(report)
+
         return report
+
+    def _save_report(self, report: dict[str, Any]) -> None:
+        """Persist the eval report to outputs/eval_reports/ with timestamp."""
+        try:
+            report_dir = self.settings.outputs_dir / "eval_reports"
+            report_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            report_path = report_dir / f"eval_{timestamp}.json"
+
+            # Make report JSON-serializable
+            serializable = json.loads(json.dumps(report, default=str))
+            serializable["timestamp"] = timestamp
+            serializable["num_predictions"] = report.get("_num_predictions", 0)
+
+            report_path.write_text(json.dumps(serializable, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info("Eval report saved to %s", report_path)
+
+            # Append to persistent score history CSV
+            self._append_to_score_history(report_dir, timestamp, report)
+
+        except Exception as e:
+            logger.warning("Failed to save eval report: %s", e)
+
+    def _append_to_score_history(
+        self,
+        report_dir: Path,
+        timestamp: str,
+        report: dict[str, Any],
+    ) -> None:
+        """
+        Append a flat row to score_history.csv for long-term improvement tracking.
+
+        Each row contains:
+        - run_id, timestamp, overall_passed
+        - One column per metric score (e.g. faithfulness, semantic_similarity, forecast_mape)
+        - One column per metric pass/fail status
+
+        The CSV grows over time — never overwritten — so you can chart score
+        trends across dozens of eval runs and compare before/after fine-tuning.
+        """
+        import csv
+
+        history_path = report_dir / "score_history.csv"
+        metrics = report.get("metrics", {})
+
+        # Build the flat row
+        row: dict[str, Any] = {
+            "run_id": timestamp,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "overall_passed": report.get("passed", False),
+            "num_hard_failures": len(report.get("hard_gate_failures", [])),
+            "num_soft_warnings": len(report.get("soft_gate_warnings", [])),
+        }
+
+        # Add each metric's score and pass/fail as separate columns
+        for metric_name, metric_data in metrics.items():
+            score = metric_data.get("score")
+            row[f"score__{metric_name}"] = round(score, 6) if isinstance(score, float) else score
+            row[f"passed__{metric_name}"] = metric_data.get("passed", False)
+            row[f"threshold__{metric_name}"] = metric_data.get("threshold")
+            row[f"gate_type__{metric_name}"] = metric_data.get("type", "")
+
+        # Check if file exists to decide whether to write header
+        file_exists = history_path.exists()
+
+        # Read existing headers if file exists (columns may grow over time)
+        existing_headers: list[str] = []
+        if file_exists:
+            with open(history_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                try:
+                    existing_headers = next(reader)
+                except StopIteration:
+                    existing_headers = []
+
+        # Merge headers — existing + any new columns from this run
+        all_headers = list(existing_headers)
+        for key in row:
+            if key not in all_headers:
+                all_headers.append(key)
+
+        if not existing_headers or set(all_headers) != set(existing_headers):
+            # Rewrite with expanded headers (preserving old data)
+            old_rows: list[dict[str, Any]] = []
+            if file_exists and existing_headers:
+                with open(history_path, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    old_rows = list(reader)
+
+            with open(history_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=all_headers, extrasaction="ignore")
+                writer.writeheader()
+                for old_row in old_rows:
+                    writer.writerow(old_row)
+                writer.writerow(row)
+        else:
+            # Simple append — headers match
+            with open(history_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=all_headers, extrasaction="ignore")
+                writer.writerow(row)
+
+        logger.info("Score history appended to %s (%d metrics)", history_path, len(metrics))
 
     def assert_pass(self, report: dict[str, Any]) -> None:
         """Utility to raise an exception if the report indicates failure."""
@@ -418,9 +524,45 @@ class QualityGateEngine:
         return results
 
     async def _run_custom_metrics(self, predictions: list[dict[str, Any]]) -> list[EvalResult]:
-        """Run custom domain-specific metrics: ROUGE-L, BERTScore, numeric accuracy."""
+        """Run custom domain-specific metrics: semantic similarity, MAPE, numeric accuracy."""
         gates = self.eval_config.gates
         results = []
+
+        # Semantic Similarity (BERTScore proxy) using sentence-transformers
+        sem_sim_score = self._compute_semantic_similarity(predictions)
+        if sem_sim_score is not None:
+            # Check if there's a configured gate for this, otherwise use defaults
+            sem_gate = gates.get("semantic_similarity")
+            threshold = sem_gate.min_threshold if sem_gate and sem_gate.min_threshold else 0.75
+            gate_type = sem_gate.gate_type if sem_gate else "soft"
+            passed = sem_sim_score >= threshold
+
+            results.append(EvalResult(
+                metric="semantic_similarity",
+                score=sem_sim_score,
+                passed=passed,
+                threshold=threshold,
+                gate_type=gate_type,
+                details=f"BGE cosine similarity across {len(predictions)} predictions",
+            ))
+
+        # Forecast MAPE for forecast-category predictions
+        forecast_preds = [p for p in predictions if p.get("category") == "demand_forecast"]
+        if forecast_preds:
+            mape_score = self._compute_forecast_mape(forecast_preds)
+            mape_gate = gates.get("forecast_mape")
+            threshold = mape_gate.max_threshold if mape_gate and mape_gate.max_threshold else 0.10
+            gate_type = mape_gate.gate_type if mape_gate else "soft"
+            passed = mape_score <= threshold
+
+            results.append(EvalResult(
+                metric="forecast_mape",
+                score=mape_score,
+                passed=passed,
+                threshold=threshold,
+                gate_type=gate_type,
+                details=f"Mean Absolute Percentage Error across {len(forecast_preds)} forecast predictions",
+            ))
 
         # Custom forecast numeric accuracy gate
         forecast_gate = gates.get("forecast_accuracy")
@@ -440,6 +582,85 @@ class QualityGateEngine:
             ))
 
         return results
+
+    def _compute_semantic_similarity(self, predictions: list[dict[str, Any]]) -> float | None:
+        """
+        Compute average cosine similarity between response and expected using BGE embeddings.
+        Acts as a BERTScore proxy — fast and fully offline.
+        """
+        if not predictions:
+            return None
+
+        try:
+            from sentence_transformers import SentenceTransformer, util
+
+            model_name = "BAAI/bge-small-en-v1.5"
+            model = SentenceTransformer(model_name, device="cpu")
+
+            similarities = []
+            for p in predictions:
+                expected = p.get("expected", "")
+                response = p.get("response", "")
+                if expected and response:
+                    ref_emb = model.encode(expected, convert_to_tensor=True)
+                    res_emb = model.encode(response, convert_to_tensor=True)
+                    sim = float(util.cos_sim(ref_emb, res_emb)[0][0])
+                    similarities.append(sim)
+
+            if not similarities:
+                return None
+
+            avg_sim = sum(similarities) / len(similarities)
+            logger.info("Semantic similarity: %.4f (across %d samples)", avg_sim, len(similarities))
+            return avg_sim
+
+        except ImportError:
+            logger.warning("sentence-transformers not installed — skipping semantic similarity.")
+            return None
+        except Exception as e:
+            logger.error("Semantic similarity computation failed: %s", e)
+            return None
+
+    def _compute_forecast_mape(self, forecast_predictions: list[dict[str, Any]]) -> float:
+        """
+        Compute Mean Absolute Percentage Error for forecast predictions.
+        Extracts numbers from response and expected, pairs them, computes MAPE.
+        """
+        if not forecast_predictions:
+            return 0.0
+
+        per_sample_errors = []
+
+        for p in forecast_predictions:
+            expected = p.get("expected", "")
+            response = p.get("response", "")
+
+            # Extract significant numbers (2+ digits) from both
+            expected_nums = [float(n) for n in re.findall(r'\b(\d{2,}(?:\.\d+)?)\b', expected)]
+            response_nums = [float(n) for n in re.findall(r'\b(\d{2,}(?:\.\d+)?)\b', response)]
+
+            if not expected_nums or not response_nums:
+                continue
+
+            # Pair numbers by position (up to min length)
+            pairs = min(len(expected_nums), len(response_nums))
+            sample_errors = []
+            for i in range(pairs):
+                actual = expected_nums[i]
+                predicted = response_nums[i]
+                if actual != 0:
+                    ape = abs(predicted - actual) / abs(actual)
+                    sample_errors.append(ape)
+
+            if sample_errors:
+                per_sample_errors.append(sum(sample_errors) / len(sample_errors))
+
+        if not per_sample_errors:
+            return 0.0
+
+        mape = sum(per_sample_errors) / len(per_sample_errors)
+        logger.info("Forecast MAPE: %.4f (across %d samples)", mape, len(per_sample_errors))
+        return mape
 
     def _compute_numeric_accuracy(self, predictions: list[dict[str, Any]]) -> float:
         """

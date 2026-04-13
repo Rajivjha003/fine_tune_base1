@@ -407,6 +407,44 @@ def page_evaluation_runner():
 # PAGE 3: METRICS DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════
 
+def _load_eval_reports(settings) -> list[dict]:
+    """Load all eval reports from outputs/eval_reports/, sorted newest first."""
+    report_dir = settings.outputs_dir / "eval_reports"
+    if not report_dir.exists():
+        return []
+    reports = []
+    for f in sorted(report_dir.glob("eval_*.json"), reverse=True):
+        try:
+            reports.append(json.loads(f.read_text(encoding="utf-8")))
+        except Exception:
+            continue
+    return reports
+
+
+def _load_score_history(settings):
+    """Load the persistent score_history.csv as a pandas DataFrame."""
+    history_path = settings.outputs_dir / "eval_reports" / "score_history.csv"
+    if not history_path.exists():
+        return None
+    try:
+        import pandas as pd
+        df = pd.read_csv(history_path)
+        return df
+    except ImportError:
+        # Fallback: read as list of dicts
+        import csv
+        with open(history_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        if not rows:
+            return None
+        # Create a minimal object with .empty, .columns, .iloc, etc.
+        # User should install pandas for full functionality
+        st.warning("Install `pandas` for full score history features: `pip install pandas`")
+        return None
+    except Exception:
+        return None
+
 def page_metrics_dashboard():
     st.title("📈 Metrics Dashboard")
     st.markdown("Four-tier metric framework per the MerchFine architecture.")
@@ -414,6 +452,39 @@ def page_metrics_dashboard():
     settings = load_settings()
     if not settings:
         return
+
+    # Load latest eval report for real scores
+    reports = _load_eval_reports(settings)
+    latest = reports[0] if reports else None
+    latest_metrics = latest.get("metrics", {}) if latest else {}
+
+    def _get_actual_score(metric_key: str) -> str:
+        """Get actual measured score from latest eval report."""
+        if metric_key in latest_metrics:
+            data = latest_metrics[metric_key]
+            score = data.get("score")
+            if isinstance(score, float):
+                return f"{score:.3f}"
+            return str(score) if score is not None else "N/A"
+        return "N/A"
+
+    def _get_badge(metric_key: str) -> str:
+        """Get pass/fail badge HTML for a metric."""
+        if metric_key in latest_metrics:
+            data = latest_metrics[metric_key]
+            if data.get("passed"):
+                return '<span class="badge-pass">PASS</span>'
+            return '<span class="badge-fail">FAIL</span>'
+        return '<span class="badge-warn">NO DATA</span>'
+
+    # Latest report info
+    if latest:
+        ts = latest.get("timestamp", "unknown")
+        passed = latest.get("passed", False)
+        badge = "✅ ALL PASSED" if passed else "❌ GATES FAILED"
+        st.markdown(f"**Latest Eval:** `{ts}` — {badge}")
+    else:
+        st.info("No eval reports found. Run the Evaluation Runner to generate metrics.")
 
     # Tier 1: Fine-Tuning Metrics
     st.markdown('<div class="section-header">Tier 1 — Fine-Tuning Metrics</div>', unsafe_allow_html=True)
@@ -429,7 +500,9 @@ def page_metrics_dashboard():
     with col2:
         st.metric("ROUGE-L", f"{metrics_t1.get('rouge_l', 'N/A')}")
     with col3:
-        st.metric("BERTScore", f"{metrics_t1.get('bertscore', 'N/A')}")
+        actual = _get_actual_score("semantic_similarity")
+        st.metric("Semantic Similarity", actual)
+        st.markdown(_get_badge("semantic_similarity"), unsafe_allow_html=True)
     with col4:
         st.metric("Train Loss", f"{metrics_t1.get('train_loss', 'N/A')}")
 
@@ -442,21 +515,29 @@ def page_metrics_dashboard():
     gates = settings.evaluation.gates if settings.evaluation else {}
     
     with col1:
+        actual = _get_actual_score("faithfulness")
         thresh = gates.get("faithfulness", {})
         thresh_val = getattr(thresh, "min_threshold", 0.85) if thresh else 0.85
-        st.metric("Faithfulness", f"≥ {thresh_val}", help="RAGAS faithfulness — output grounded in context")
+        st.metric("Faithfulness", actual if actual != "N/A" else f"≥ {thresh_val}")
+        st.markdown(_get_badge("faithfulness"), unsafe_allow_html=True)
     with col2:
+        actual = _get_actual_score("answer_relevancy")
         thresh = gates.get("answer_relevancy", {})
         thresh_val = getattr(thresh, "min_threshold", 0.80) if thresh else 0.80
-        st.metric("Answer Relevancy", f"≥ {thresh_val}", help="RAGAS answer relevancy")
+        st.metric("Answer Relevancy", actual if actual != "N/A" else f"≥ {thresh_val}")
+        st.markdown(_get_badge("answer_relevancy"), unsafe_allow_html=True)
     with col3:
+        actual = _get_actual_score("contextual_precision")
         thresh = gates.get("contextual_precision", {})
         thresh_val = getattr(thresh, "min_threshold", 0.75) if thresh else 0.75
-        st.metric("Context Precision", f"≥ {thresh_val}", help="RAGAS context precision")
+        st.metric("Context Precision", actual if actual != "N/A" else f"≥ {thresh_val}")
+        st.markdown(_get_badge("contextual_precision"), unsafe_allow_html=True)
     with col4:
+        actual = _get_actual_score("hallucination_rate")
         thresh = gates.get("hallucination_rate", {})
         thresh_val = getattr(thresh, "max_threshold", 0.10) if thresh else 0.10
-        st.metric("Hallucination Rate", f"≤ {thresh_val}", help="DeepEval hallucination rate")
+        st.metric("Hallucination Rate", actual if actual != "N/A" else f"≤ {thresh_val}")
+        st.markdown(_get_badge("hallucination_rate"), unsafe_allow_html=True)
 
     # Tier 3: System Metrics
     st.markdown('<div class="section-header">Tier 3 — System Metrics</div>', unsafe_allow_html=True)
@@ -486,34 +567,210 @@ def page_metrics_dashboard():
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
+        actual = _get_actual_score("forecast_numeric_accuracy")
         thresh = gates.get("forecast_accuracy", {})
         thresh_val = getattr(thresh, "min_threshold", 0.80) if thresh else 0.80
-        st.metric("Forecast Numeric Accuracy", f"≥ {thresh_val}")
+        st.metric("Forecast Numeric Accuracy", actual if actual != "N/A" else f"≥ {thresh_val}")
+        st.markdown(_get_badge("forecast_numeric_accuracy"), unsafe_allow_html=True)
     with col2:
+        actual = _get_actual_score("forecast_mape")
+        st.metric("Forecast MAPE", actual if actual != "N/A" else "N/A")
+        st.markdown(_get_badge("forecast_mape"), unsafe_allow_html=True)
+    with col3:
+        actual = _get_actual_score("refusal_accuracy")
         thresh = gates.get("refusal_accuracy", {})
         thresh_val = getattr(thresh, "min_threshold", 0.90) if thresh else 0.90
-        st.metric("Refusal Accuracy", f"≥ {thresh_val}")
-    with col3:
-        st.metric("SKU Hallucination Rate", "Target: ≤ 5%")
+        st.metric("Refusal Accuracy", actual if actual != "N/A" else f"≥ {thresh_val}")
+        st.markdown(_get_badge("refusal_accuracy"), unsafe_allow_html=True)
     with col4:
-        st.metric("Numerical Grounding", "Target: ≥ 80%")
+        st.metric("Numerical Grounding", _get_actual_score("numeric_grounding") or "Target: ≥ 80%")
 
-    # Quality Gates Summary
-    st.markdown('<div class="section-header">Quality Gate Thresholds</div>', unsafe_allow_html=True)
+    # Quality Gates Summary Table
+    st.markdown('<div class="section-header">Quality Gate Results</div>', unsafe_allow_html=True)
     
-    gate_data = []
-    for key, gate in gates.items():
-        gate_data.append({
-            "Gate": key,
-            "Metric": gate.metric,
-            "Type": gate.gate_type.upper(),
-            "Min Threshold": gate.min_threshold or "-",
-            "Max Threshold": gate.max_threshold or "-",
-            "Description": gate.description,
-        })
-    
-    if gate_data:
-        st.dataframe(gate_data, use_container_width=True, hide_index=True)
+    if latest_metrics:
+        metrics_table = []
+        for name, data in latest_metrics.items():
+            score = data.get("score")
+            metrics_table.append({
+                "Metric": name,
+                "Score": f"{score:.3f}" if isinstance(score, float) else str(score),
+                "Threshold": str(data.get("threshold", "-")),
+                "Status": "✅ Pass" if data.get("passed") else "❌ Fail",
+                "Type": data.get("type", "-"),
+                "Details": data.get("details", ""),
+            })
+        st.dataframe(metrics_table, use_container_width=True, hide_index=True)
+    else:
+        gate_data = []
+        for key, gate in gates.items():
+            gate_data.append({
+                "Gate": key,
+                "Metric": gate.metric,
+                "Type": gate.gate_type.upper(),
+                "Min Threshold": gate.min_threshold or "-",
+                "Max Threshold": gate.max_threshold or "-",
+                "Description": gate.description,
+            })
+        if gate_data:
+            st.dataframe(gate_data, use_container_width=True, hide_index=True)
+
+    # ── Score History & Improvement Tracking ────────────────────────────────
+    st.markdown('<div class="section-header">📊 Score History — Track Improvement Over Time</div>', unsafe_allow_html=True)
+    st.caption("Every eval run is recorded. Use this to measure the impact of fine-tuning, RAG changes, and prompt engineering.")
+
+    history_df = _load_score_history(settings)
+
+    if history_df is not None and not history_df.empty:
+        # Summary stats
+        n_runs = len(history_df)
+        n_passed = history_df["overall_passed"].astype(str).str.lower().isin(["true", "1"]).sum()
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Eval Runs", n_runs)
+        with col2:
+            st.metric("Pass Rate", f"{n_passed}/{n_runs} ({100*n_passed/max(n_runs,1):.0f}%)")
+        with col3:
+            last_run = history_df.iloc[-1]["timestamp_utc"] if "timestamp_utc" in history_df.columns else "?"
+            st.metric("Last Run", str(last_run)[:19])
+
+        # ── Trend Chart ──────────────────────────────────────────────────
+        score_cols = [c for c in history_df.columns if c.startswith("score__")]
+        if score_cols:
+            st.markdown("### 📈 Score Trends")
+
+            # Let user pick which metrics to chart
+            metric_names = [c.replace("score__", "") for c in score_cols]
+            selected = st.multiselect(
+                "Select metrics to plot",
+                options=metric_names,
+                default=metric_names[:4],  # Show first 4 by default
+                key="trend_metrics",
+            )
+
+            if selected:
+                try:
+                    import plotly.graph_objects as go
+
+                    fig = go.Figure()
+
+                    for metric in selected:
+                        col_name = f"score__{metric}"
+                        if col_name in history_df.columns:
+                            y_vals = history_df[col_name].apply(
+                                lambda v: float(v) if v and str(v).replace('.','',1).replace('-','',1).isdigit() else None
+                            )
+                            fig.add_trace(go.Scatter(
+                                x=list(range(1, n_runs + 1)),
+                                y=y_vals,
+                                mode="lines+markers",
+                                name=metric,
+                                line=dict(width=2),
+                                marker=dict(size=6),
+                                hovertemplate=f"<b>{metric}</b><br>Run #%{{x}}<br>Score: %{{y:.4f}}<extra></extra>",
+                            ))
+
+                            # Add threshold line if available
+                            thresh_col = f"threshold__{metric}"
+                            if thresh_col in history_df.columns:
+                                thresh_val = history_df[thresh_col].iloc[-1]
+                                if thresh_val and str(thresh_val) not in ("None", "-", ""):
+                                    try:
+                                        thresh_float = float(thresh_val)
+                                        fig.add_hline(
+                                            y=thresh_float,
+                                            line_dash="dash",
+                                            line_color="rgba(255,100,100,0.5)",
+                                            annotation_text=f"{metric} threshold",
+                                            annotation_font_size=10,
+                                        )
+                                    except (ValueError, TypeError):
+                                        pass
+
+                    fig.update_layout(
+                        xaxis_title="Eval Run #",
+                        yaxis_title="Score",
+                        yaxis_range=[0, 1.05],
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(20,20,40,0.5)",
+                        font_color="#ffffff",
+                        height=420,
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="right",
+                            x=1,
+                        ),
+                        margin=dict(l=40, r=20, t=40, b=40),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                except ImportError:
+                    st.info("Install `plotly` for trend charts: `pip install plotly`")
+
+        # ── Full Score History Table ──────────────────────────────────────
+        st.markdown("### 📋 Full Score History")
+
+        # Build a clean display table
+        display_cols = ["run_id", "timestamp_utc", "overall_passed"] + score_cols
+        display_df = history_df[[c for c in display_cols if c in history_df.columns]].copy()
+
+        # Rename columns for readability
+        display_df.columns = [
+            c.replace("score__", "").replace("_", " ").title() if c.startswith("score__")
+            else c.replace("_", " ").title()
+            for c in display_df.columns
+        ]
+
+        st.dataframe(
+            display_df.iloc[::-1],  # newest first
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ── Delta (improvement) from first → last run ────────────────────
+        if n_runs >= 2 and score_cols:
+            st.markdown("### 📐 Improvement: First Run → Latest Run")
+            first_row = history_df.iloc[0]
+            last_row = history_df.iloc[-1]
+
+            delta_data = []
+            for col in score_cols:
+                metric = col.replace("score__", "")
+                try:
+                    first_val = float(first_row[col]) if first_row[col] and str(first_row[col]) not in ("", "None") else None
+                    last_val = float(last_row[col]) if last_row[col] and str(last_row[col]) not in ("", "None") else None
+                except (ValueError, TypeError):
+                    first_val = last_val = None
+
+                if first_val is not None and last_val is not None:
+                    delta = last_val - first_val
+                    delta_pct = (delta / max(abs(first_val), 0.001)) * 100
+                    direction = "📈" if delta > 0 else ("📉" if delta < 0 else "➡️")
+                    delta_data.append({
+                        "Metric": metric,
+                        "First Run": f"{first_val:.4f}",
+                        "Latest Run": f"{last_val:.4f}",
+                        "Change": f"{delta:+.4f}",
+                        "Change %": f"{delta_pct:+.1f}%",
+                        "Trend": direction,
+                    })
+
+            if delta_data:
+                st.dataframe(delta_data, use_container_width=True, hide_index=True)
+
+        # ── CSV Download ─────────────────────────────────────────────────
+        st.markdown("---")
+        csv_data = history_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download Full Score History (CSV)",
+            data=csv_data,
+            file_name=f"merchfine_score_history_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
+    else:
+        st.info("No score history yet. Run the Evaluation Runner (🧪) to start recording metrics.")
 
 
 def _load_mlflow_metrics(settings) -> dict:

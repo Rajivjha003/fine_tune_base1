@@ -1,6 +1,8 @@
 # ── Environment & Keys ────────
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 venv/
 venv_wsl/
 

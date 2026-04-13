@@ -160,25 +160,41 @@ class PipelineOrchestrator:
 
         logger.info("Found %d flagged feedback entries with corrections.", len(flagged_entries))
 
-        # Convert to training format and append to dataset
-        new_samples = []
-        for entry in flagged_entries:
-            sample = {
-                "instruction": entry["query"],
-                "input": "",
-                "output": entry["corrected_response"],
-                "category": entry.get("category", "general"),
-                "source": "feedback",
-            }
-            new_samples.append(sample)
+        # Convert to training format using proper TrainingSample schema
+        from data.schema import TrainingSample, SampleCategory
 
-        # Append to the training data
+        # Map raw string categories to SampleCategory enum
+        category_map = {v.value: v for v in SampleCategory}
+
+        new_samples: list[TrainingSample] = []
+        for entry in flagged_entries:
+            raw_cat = entry.get("category", "general")
+            category = category_map.get(raw_cat, SampleCategory.GENERAL)
+
+            try:
+                sample = TrainingSample(
+                    instruction=entry["query"],
+                    input="",
+                    output=entry["corrected_response"],
+                    category=category,
+                    source="feedback",
+                    metadata={"feedback_rating": entry.get("rating"), "timestamp": entry.get("timestamp")},
+                )
+                new_samples.append(sample)
+            except Exception as e:
+                logger.warning("Skipping invalid feedback entry: %s", e)
+                continue
+
+        if not new_samples:
+            return {"status": "skipped", "reason": "No valid feedback entries after validation."}
+
+        # Append to the training data using proper JSONL serialization
         output_file = self.settings.data_dir / "processed" / "train_feedback_corrections.jsonl"
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(output_file, "a", encoding="utf-8") as f:
             for sample in new_samples:
-                f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+                f.write(sample.to_jsonl_line() + "\n")
 
         logger.info("Wrote %d feedback-derived training samples to %s", len(new_samples), output_file)
 
