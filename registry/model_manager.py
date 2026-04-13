@@ -259,7 +259,7 @@ class ModelManager:
             logger.warning("Failed to list versions for '%s': %s", registry_name, e)
             return []
 
-    def rollback(self, model_key: str) -> bool:
+    def rollback(self, model_key: str, *, reason: str = "") -> bool:
         """
         Roll back to the previous @archived version.
 

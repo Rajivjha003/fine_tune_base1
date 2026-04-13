@@ -20,7 +20,15 @@ from pathlib import Path
 import httpx
 
 from core.config import get_settings
-from core.events import SYSTEM_ERROR, SYSTEM_READY, event_bus
+from core.events import (
+    EVAL_GATE_FAILED,
+    EVAL_GATE_PASSED,
+    MODEL_SWAPPED,
+    SYSTEM_ERROR,
+    SYSTEM_READY,
+    TRAINING_COMPLETED,
+    event_bus,
+)
 from core.exceptions import SystemInitError
 
 logger = logging.getLogger(__name__)
@@ -126,14 +134,21 @@ class SystemInitializer:
                 resp = await client.get(f"{self.settings.mlflow_tracking_uri}/health")
                 self.report.mlflow_reachable = resp.status_code == 200
         except Exception:
-            # MLflow might be in file-based mode (no server needed)
-            mlruns_path = self.settings.project_root / "mlruns"
-            if mlruns_path.exists():
-                self.report.mlflow_reachable = True
-                self.settings.mlflow_tracking_uri = str(mlruns_path.resolve().as_uri())
-                logger.info("MLflow in file-based mode (no server). Using local mlruns/.")
-            else:
-                self.report.mlflow_reachable = False
+            # MLflow file-based mode ('./mlruns') is deprecated. Use SQLite backend fallback.
+            db_path = self.settings.project_root / "mlflow.db"
+            
+            # Ensure mlruns directory exists for artifacts mapping
+            (self.settings.project_root / "mlruns").mkdir(exist_ok=True)
+            
+            db_uri = f"sqlite:///{db_path.resolve().as_posix()}"
+            self.report.mlflow_reachable = True
+            self.settings.mlflow_tracking_uri = db_uri
+            
+            import mlflow
+            mlflow.set_tracking_uri(db_uri)
+            mlflow.set_registry_uri(db_uri)
+            
+            logger.info("MLflow tracking server unreachable. Falling back to SQLite backend.")
 
     async def check_redis(self) -> None:
         """Check if Redis is reachable."""
@@ -197,6 +212,9 @@ class SystemInitializer:
             except Exception as e:
                 logger.warning("MLflow experiment init failed: %s", e)
 
+        # ── Wire EventBus automation handlers ─────────────────────────
+        await self._register_event_handlers()
+
         # Emit event
         if report.is_healthy:
             await event_bus.emit(
@@ -214,6 +232,60 @@ class SystemInitializer:
             logger.error("System bootstrap completed with errors.")
 
         return report
+
+    async def _register_event_handlers(self) -> None:
+        """
+        Wire the critical EventBus automation chain:
+        - TRAINING_COMPLETED → log + trigger evaluation
+        - EVAL_GATE_FAILED → auto-rollback to previous champion
+        - EVAL_GATE_PASSED → log promotion event
+        - MODEL_SWAPPED → log deployment trace
+        """
+
+        async def on_training_completed(event):
+            logger.info(
+                "[EVENT] Training completed for model '%s'. Output: %s",
+                event.data.get("model_key", "unknown"),
+                event.data.get("output_dir", "N/A"),
+            )
+
+        async def on_gate_failed(event):
+            logger.error(
+                "[EVENT] Quality gate FAILED for model '%s'. Failures: %s",
+                event.data.get("model_key", "unknown"),
+                event.data.get("failures", []),
+            )
+            # Auto-rollback to previous champion
+            try:
+                from registry.model_manager import ModelManager
+                manager = ModelManager()
+                model_key = event.data.get("model_key")
+                if model_key:
+                    manager.rollback(model_key, reason="Auto-rollback: quality gate failed")
+                    logger.info("[EVENT] Auto-rollback completed for '%s'.", model_key)
+            except Exception as e:
+                logger.error("[EVENT] Auto-rollback failed: %s", e)
+
+        async def on_gate_passed(event):
+            logger.info(
+                "[EVENT] Quality gate PASSED for model '%s'. Metrics: %s",
+                event.data.get("model_key", "unknown"),
+                event.data.get("metrics", {}),
+            )
+
+        async def on_model_swapped(event):
+            logger.info(
+                "[EVENT] Model swapped: %s → %s",
+                event.data.get("from_model", "none"),
+                event.data.get("to_model", "unknown"),
+            )
+
+        event_bus.subscribe(TRAINING_COMPLETED, on_training_completed)
+        event_bus.subscribe(EVAL_GATE_FAILED, on_gate_failed)
+        event_bus.subscribe(EVAL_GATE_PASSED, on_gate_passed)
+        event_bus.subscribe(MODEL_SWAPPED, on_model_swapped)
+
+        logger.info("EventBus automation handlers registered.")
 
 
 async def _async_main(check_only: bool = False) -> None:

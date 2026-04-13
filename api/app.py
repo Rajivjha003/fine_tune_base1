@@ -117,12 +117,46 @@ def create_app() -> FastAPI:
             },
         )
 
+    # ── Prometheus /metrics endpoint ─────────────────────────────────
+    try:
+        from prometheus_client import make_asgi_app, Counter, Histogram
+
+        # Register application metrics
+        Counter(
+            "merchfine_requests_total",
+            "Total API requests",
+            ["method", "endpoint", "status"],
+        )
+        Histogram(
+            "merchfine_request_duration_seconds",
+            "Request duration in seconds",
+            ["method", "endpoint"],
+        )
+        Counter(
+            "merchfine_guardrail_flags_total",
+            "Total guardrail flags/blocks",
+            ["layer", "verdict"],
+        )
+
+        metrics_app = make_asgi_app()
+        app.mount("/metrics", metrics_app)
+        logger.info("Prometheus /metrics endpoint mounted.")
+    except ImportError:
+        logger.warning("prometheus_client not installed — /metrics endpoint unavailable.")
+
     # ── Mount routes ─────────────────────────────────────────────────
     from api.routes.forecast import router as forecast_router
     from api.routes.admin import router as admin_router
 
     app.include_router(forecast_router, prefix="/api", tags=["Forecasting"])
     app.include_router(admin_router, prefix="/admin", tags=["Admin"])
+
+    # ── Feedback endpoint ────────────────────────────────────────────
+    try:
+        from api.routes.feedback import router as feedback_router
+        app.include_router(feedback_router, prefix="/api", tags=["Feedback"])
+    except ImportError:
+        logger.warning("Feedback router not available.")
 
     # ── Root health check ────────────────────────────────────────────
 

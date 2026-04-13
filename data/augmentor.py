@@ -90,6 +90,10 @@ class SyntheticAugmentor:
         Returns:
             List of new, validated, deduplicated TrainingSample objects.
         """
+        if not seed_samples:
+            logger.warning("No seed samples provided — skipping augmentation.")
+            return []
+
         if existing_checksums is None:
             existing_checksums = {s.checksum for s in seed_samples}
 
