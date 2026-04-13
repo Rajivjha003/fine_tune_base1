@@ -11,3 +11,4 @@ __pycache__/
 outputs/
 data/processed/
 data/vector_store/
+CombinedFiles/
